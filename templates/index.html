@@ -1,0 +1,225 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>我的本地媒体库</title>
+    <!-- 使用本地 Bootstrap CSS，确保离线可用 -->
+    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+    <style>
+        /* 自定义样式可以保留，用来微调 Bootstrap */
+        body {
+            background-color: #f8f9fa;
+            /* 使用一个柔和的背景色 */
+        }
+
+        /* 媒体卡片样式 */
+        .media-card {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            cursor: pointer;
+        }
+
+        .media-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 .5rem 1rem rgba(0, 0, 0, .15) !important;
+        }
+
+        .card-img-top {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            background-color: #e9ecef;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h2 mb-0">我的媒体库</h1>
+            <a href="/manage" class="btn btn-outline-secondary">前往管理页面</a>
+        </div>
+        <!-- 【新增】一个固定的页脚，用于放置退出按钮 -->
+        <footer class="container text-end my-4">
+            <button id="exitButton" class="btn btn-sm btn-danger">退出程序</button>
+        </footer>
+
+        <!-- 筛选区域，使用 Card 组件包装 -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-5">
+                        <label for="titleSearchInput" class="form-label">按标题搜索</label>
+                        <input type="text" id="titleSearchInput" class="form-control" placeholder="输入标题关键词...">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="typeSelector" class="form-label">按类型筛选</label>
+                        <select id="typeSelector" class="form-select">
+                            <option value="">所有类型</option>
+                            <option>视频</option>
+                            <option>音频</option>
+                            <option>图片</option>
+                            <option>小说</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <button onclick="applyFilters()" class="btn btn-primary w-100">搜索</button>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">按标签筛选 (可多选)</label>
+                        <div id="tagSelector">
+                            <!-- 标签按钮将由 JS 动态加载 -->
+                        </div>
+                    </div>
+                    <div class="col-12 mt-2">
+                        <button onclick="resetFilters()"
+                            class="btn btn-sm btn-link text-decoration-none ps-0">重置所有筛选</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 画廊区域 -->
+        <div id="gallery" class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 g-4">
+            <!-- 媒体卡片将由 JS 动态加载 -->
+        </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle (可选, 但某些组件需要) -->
+    <!-- 如果您有下载到本地，也可以换成本地路径 -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const gallery = document.getElementById('gallery');
+        const titleInput = document.getElementById('titleSearchInput');
+        const typeSelector = document.getElementById('typeSelector');
+        const tagSelectorContainer = document.getElementById('tagSelector');
+
+        let selectedTags = new Set();
+
+        // 【修改】动态加载预设标签，使用 Bootstrap 按钮样式
+        async function loadAndRenderPresetTags() {
+            const response = await fetch('/api/tags');
+            const tags = await response.json();
+            tagSelectorContainer.innerHTML = '';
+            tags.forEach(tag => {
+                const button = document.createElement('button');
+                button.className = 'btn btn-outline-secondary btn-sm me-1 mb-1'; // Bootstrap 样式
+                button.textContent = tag;
+                button.dataset.tag = tag;
+                button.onclick = () => toggleTagSelection(tag);
+                tagSelectorContainer.appendChild(button);
+            });
+        }
+
+        // 【修改】标签点击逻辑，切换不同的 Bootstrap class
+        function toggleTagSelection(tag) {
+            const button = tagSelectorContainer.querySelector(`[data-tag="${tag}"]`);
+            if (selectedTags.has(tag)) {
+                selectedTags.delete(tag);
+                button.classList.remove('btn-primary');
+                button.classList.add('btn-outline-secondary');
+            } else {
+                selectedTags.add(tag);
+                button.classList.remove('btn-outline-secondary');
+                button.classList.add('btn-primary');
+            }
+        }
+
+        // 【修改】渲染媒体项，使用 Bootstrap Card 结构
+        async function fetchAndRenderMedia(title = '', tags = '', type = '') {
+            let url = '/api/media';
+            const params = new URLSearchParams();
+            if (title) params.append('title', title);
+            if (tags) params.append('tags', tags);
+            if (type) params.append('type', type);
+
+            const paramString = params.toString();
+            if (paramString) url += '?' + paramString;
+
+            const response = await fetch(url);
+            const mediaItems = await response.json();
+
+            gallery.innerHTML = '';
+            if (mediaItems.length === 0) {
+                gallery.innerHTML = '<div class="col-12"><p class="text-center text-muted mt-5">未找到匹配项。</p></div>';
+                return;
+            }
+
+            mediaItems.forEach(item => {
+                const colDiv = document.createElement('div');
+                colDiv.className = 'col';
+
+                const fileUrl = `/files/${encodeURIComponent(item.filepath)}`;
+                let coverUrl = 'https://via.placeholder.com/286x150/868e96/FFFFFF?text=' + encodeURIComponent(item.media_type);
+                if (item.cover_path) {
+                    coverUrl = `/files/${encodeURIComponent(item.cover_path)}`;
+                }
+
+                colDiv.innerHTML = `
+                <a href="${fileUrl}" target="_blank" onclick="recordView(${item.id})" class="text-decoration-none text-dark">
+                    <div class="card h-100 shadow-sm media-card">
+                        <img src="${coverUrl}" class="card-img-top" alt="${item.title}">
+                        <div class="card-body p-3">
+                            <h6 class="card-title text-truncate" title="${item.title}">${item.title}</h6>
+                            <p class="card-text small text-muted">
+                                <span class="badge bg-secondary me-1">${item.media_type}</span>
+                                <span class="text-truncate d-inline-block" style="max-width: 150px;">${item.tags || ''}</span>
+                            </p>
+                        </div>
+                    </div>
+                </a>
+                `;
+                gallery.appendChild(colDiv);
+            });
+        }
+
+        function applyFilters() {
+            const title = titleInput.value.trim();
+            const type = typeSelector.value;
+            const tags = Array.from(selectedTags).join(',');
+            fetchAndRenderMedia(title, tags, type);
+        }
+
+        function resetFilters() {
+            titleInput.value = '';
+            typeSelector.value = '';
+            selectedTags.clear();
+            // 恢复所有按钮的默认样式
+            tagSelectorContainer.querySelectorAll('button').forEach(btn => {
+                btn.classList.remove('btn-primary');
+                btn.classList.add('btn-outline-secondary');
+            });
+            applyFilters();
+        }
+
+        async function recordView(mediaId) {
+            await fetch(`/api/view/${mediaId}`, { method: 'POST' });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadAndRenderPresetTags();
+            applyFilters();
+        });
+
+        // 【新增】为退出按钮添加事件监听器
+        document.getElementById('exitButton').addEventListener('click', async () => {
+            if (confirm('确定要关闭媒体库程序吗？')) {
+                try {
+                    // 向后端发送关闭请求
+                    await fetch('/shutdown', { method: 'POST' });
+                    // 请求发送后，给用户一个提示，然后可以关闭网页
+                    alert('程序正在后台关闭。您可以安全地关闭此浏览器标签页。');
+                    window.close(); // 尝试关闭当前标签页
+                } catch (error) {
+                    // 如果服务器已经关闭，fetch 会失败，这也是预期的行为
+                    alert('程序已关闭。');
+                    window.close();
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>

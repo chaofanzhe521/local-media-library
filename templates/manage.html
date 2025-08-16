@@ -1,0 +1,305 @@
+<!-- templates/manage.html -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>媒体管理</title>
+    <!-- 使用本地 Bootstrap CSS，确保离线可用 -->
+    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+    <style>
+        /* 自定义拖拽区域样式 */
+        .drop-zone {
+            border: 2px dashed #adb5bd;
+            border-radius: .375rem;
+            padding: 1.5rem;
+            text-align: center;
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+        }
+
+        .drop-zone.drag-over {
+            background-color: #e9ecef;
+            border-color: #0d6efd;
+        }
+    </style>
+</head>
+
+<body class="bg-light">
+
+    <div class="container my-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h2 mb-0">媒体管理</h1>
+            <div>
+                <a href="/tags-management" class="btn btn-info">管理标签库</a>
+                <a href="/" class="btn btn-secondary">返回浏览页</a>
+            </div>
+        </div>
+
+        <!-- 添加新媒体表单 -->
+        <div class="card shadow-sm mb-5">
+            <div class="card-header">
+                <h5 class="mb-0">添加新媒体</h5>
+            </div>
+            <div class="card-body">
+                <form id="addMediaForm">
+                    <div class="mb-3">
+                        <label for="title" class="form-label">标题 (不填则自动使用文件名)</label>
+                        <input type="text" id="title" class="form-control">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">媒体文件 <span class="text-danger">*</span></label>
+                        <div id="mediaDropZone" class="drop-zone">
+                            <input type="text" id="filepath" class="form-control" readonly required
+                                placeholder="拖拽文件到此，或点击右侧按钮选择">
+                            <button type="button" class="btn btn-primary ms-2 flex-shrink-0"
+                                onclick="selectMediaFile()">选择</button>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="media_type" class="form-label">类型</label>
+                            <select id="media_type" class="form-select">
+                                <option>视频</option>
+                                <option>音频</option>
+                                <option>图片</option>
+                                <option>小说</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">封面 (可选)</label>
+                            <div id="coverDropZone" class="drop-zone p-2">
+                                <input type="text" id="cover_path" class="form-control" readonly placeholder="拖拽或点击选择">
+                                <button type="button" class="btn btn-primary ms-2 flex-shrink-0"
+                                    onclick="selectCoverFile()">选择</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">标签</label>
+                        <input type="hidden" id="tags">
+                        <div id="selectedTags" class="mb-2">
+                            <!-- JS 会在这里生成选中的标签 -->
+                        </div>
+                        <div id="presetTags" class="border p-2 rounded bg-light">
+                            <!-- JS 会在这里生成可用的标签按钮 -->
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-success w-100 py-2">确认添加</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- 已存在的媒体列表 -->
+        <h2 class="h4 mb-3">已存在的媒体</h2>
+        <ul id="mediaList" class="list-group">
+            <!-- JS 会在这里动态生成列表项 -->
+        </ul>
+    </div>
+
+    <!-- 引入 Bootstrap JS (可选) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let selectedTags = new Set();
+        const selectedTagsContainer = document.getElementById('selectedTags');
+        const hiddenTagsInput = document.getElementById('tags');
+
+        // --- 核心：标签管理 ---
+        // 渲染已选择的标签，使用 Bootstrap Badge 样式
+        function renderSelectedTags() {
+            selectedTagsContainer.innerHTML = '';
+            selectedTags.forEach(tag => {
+                const tagSpan = document.createElement('span');
+                tagSpan.className = 'badge bg-primary me-1 mb-1 fs-6';
+                tagSpan.style.cursor = 'pointer';
+                tagSpan.innerHTML = `${tag} <span class="fw-bold" style="font-size: 0.9em;">&times;</span>`;
+                tagSpan.onclick = () => removeTag(tag);
+                selectedTagsContainer.appendChild(tagSpan);
+            });
+            hiddenTagsInput.value = Array.from(selectedTags).join(',');
+        }
+
+        // 添加一个标签
+        function addTag(tag) {
+            selectedTags.add(tag);
+            renderSelectedTags();
+        }
+
+        // 移除一个标签
+        function removeTag(tag) {
+            selectedTags.delete(tag);
+            renderSelectedTags();
+        }
+
+        // 初始化预设标签，使用 Bootstrap Button 样式
+        async function loadPresetTags() {
+            const response = await fetch('/api/tags');
+            const tags = await response.json();
+            const container = document.getElementById('presetTags');
+            container.innerHTML = '';
+            if (tags.length === 0) {
+                container.innerHTML = '<small class="text-muted">没有可用的标签，请先在“管理标签库”中添加。</small>';
+            }
+            tags.forEach(tag => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'btn btn-outline-secondary btn-sm me-1 mb-1';
+                button.textContent = tag;
+                button.onclick = () => addTag(tag);
+                container.appendChild(button);
+            });
+        }
+
+        // --- 【恢复】文件选择功能 ---
+        async function selectMediaFile() {
+            const response = await fetch('/api/select-file');
+            const data = await response.json();
+            if (data.filepath) {
+                document.getElementById('filepath').value = data.filepath;
+                // 如果标题为空，自动填充
+                if (!document.getElementById('title').value.trim()) {
+                    document.getElementById('title').value = data.filepath.split(/[\\/]/).pop();
+                }
+            }
+        }
+        async function selectCoverFile() {
+            const response = await fetch('/api/select-file?type=image');
+            const data = await response.json();
+            if (data.filepath) {
+                document.getElementById('cover_path').value = data.filepath;
+            }
+        }
+
+        // --- 加载和显示已有媒体 ---
+        async function loadMedia() {
+            const response = await fetch('/api/media');
+            const items = await response.json();
+            const list = document.getElementById('mediaList');
+            list.innerHTML = '';
+            items.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item d-flex justify-content-between align-items-center flex-wrap';
+                li.innerHTML = `
+                    <div class="me-3" style="min-width: 200px; max-width: 70%;">
+                        <strong>${item.title}</strong> 
+                        <span class="badge bg-info text-dark ms-2">${item.media_type}</span>
+                        <br>
+                        <small class="text-muted d-block text-truncate">路径: ${item.filepath}</small>
+                        <small class="d-block">标签: ${item.tags || '无'}</small>
+                    </div>
+                    <button onclick="deleteMedia(${item.id})" class="btn btn-danger btn-sm flex-shrink-0 mt-1 mt-md-0">删除</button>
+                `;
+                list.appendChild(li);
+            });
+        }
+
+        // --- 添加媒体 ---
+        document.getElementById('addMediaForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            let title = document.getElementById('title').value.trim();
+            const filepath = document.getElementById('filepath').value;
+            if (!title && filepath) {
+                title = filepath.split(/[\\/]/).pop();
+            }
+            if (!filepath) {
+                alert('请务必选择一个媒体文件！');
+                return;
+            }
+            const payload = {
+                title,
+                filepath,
+                media_type: document.getElementById('media_type').value,
+                tags: document.getElementById('tags').value,
+                cover_path: document.getElementById('cover_path').value,
+            };
+            const response = await fetch('/api/media', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (response.ok) {
+                alert('添加成功!');
+                document.getElementById('addMediaForm').reset();
+                selectedTags.clear();
+                renderSelectedTags();
+                loadMedia();
+            } else {
+                const error = await response.json();
+                alert('添加失败: ' + error.message);
+            }
+        });
+
+        // --- 【恢复】删除媒体功能 ---
+        async function deleteMedia(id) {
+            if (!confirm(`确定要删除这个条目吗?`)) {
+                return;
+            }
+            const response = await fetch(`/api/media/${id}`, { method: 'DELETE' });
+            if (response.ok) {
+                // 删除成功后直接刷新列表，比弹窗体验更好
+                loadMedia();
+            } else {
+                alert('删除失败!');
+            }
+        }
+
+        // --- 【恢复】拖拽功能 ---
+        function setupDragAndDrop(dropZoneId, inputId) {
+            const dropZone = document.getElementById(dropZoneId);
+            const inputField = document.getElementById(inputId);
+
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }, false);
+            });
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => {
+                    dropZone.classList.add('drag-over');
+                }, false);
+            });
+
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('drag-over');
+            }, false);
+
+            dropZone.addEventListener('drop', async (e) => {
+                dropZone.classList.remove('drag-over');
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                if (files.length > 0) {
+                    const file = files[0];
+                    const filename = file.name;
+                    const fileType = (inputId === 'cover_path') ? 'image' : 'all';
+                    const url = `/api/select-file?filename=${encodeURIComponent(filename)}&type=${fileType}`;
+
+                    const response = await fetch(url);
+                    const data = await response.json();
+
+                    if (data.filepath) {
+                        inputField.value = data.filepath;
+                        if (inputId === 'filepath' && !document.getElementById('title').value.trim()) {
+                            document.getElementById('title').value = data.filepath.split(/[\\/]/).pop();
+                        }
+                    }
+                }
+            }, false);
+        }
+
+        // --- 页面加载时 ---
+        document.addEventListener('DOMContentLoaded', () => {
+            loadMedia();
+            loadPresetTags();
+            setupDragAndDrop('mediaDropZone', 'filepath');
+            setupDragAndDrop('coverDropZone', 'cover_path');
+        });
+    </script>
+</body>
+
+</html>

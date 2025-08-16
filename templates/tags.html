@@ -1,0 +1,113 @@
+<!-- templates/tags.html -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>标签管理</title>
+    <link rel="stylesheet" href="/static/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body class="bg-light">
+
+    <div class="container mt-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h2">标签管理</h1>
+            <div>
+                <a href="/" class="btn btn-secondary">返回浏览页</a>
+                <a href="/manage" class="btn btn-secondary">返回媒体管理</a>
+            </div>
+        </div>
+
+        <!-- 添加新标签的表单 -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <form id="addTagForm" class="d-flex">
+                    <input type="text" id="newTagName" class="form-control me-2" placeholder="输入新的标签名..." required>
+                    <button type="submit" class="btn btn-primary">添加</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- 当前标签列表 -->
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <h5 class="mb-0">所有标签</h5>
+            </div>
+            <ul id="tagList" class="list-group list-group-flush">
+                <!-- 标签将由 JS 动态加载到这里 -->
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const tagListEl = document.getElementById('tagList');
+        const addTagForm = document.getElementById('addTagForm');
+        const newTagNameInput = document.getElementById('newTagName');
+
+        // 加载并渲染所有标签
+        async function loadTags() {
+            const response = await fetch('/api/tags');
+            const tags = await response.json();
+
+            tagListEl.innerHTML = ''; // 清空列表
+            if (tags.length === 0) {
+                tagListEl.innerHTML = '<li class="list-group-item text-muted">暂无标签，请添加。</li>';
+            } else {
+                tags.forEach(tag => {
+                    const li = document.createElement('li');
+                    li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                    li.innerHTML = `
+                        <span>${tag}</span>
+                        <button class="btn btn-danger btn-sm" onclick="deleteTag('${tag}')">&times;</button>
+                    `;
+                    tagListEl.appendChild(li);
+                });
+            }
+        }
+
+        // 处理添加新标签的表单提交
+        addTagForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const tagName = newTagNameInput.value.trim();
+            if (!tagName) return;
+
+            const response = await fetch('/api/tags', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: tagName })
+            });
+
+            if (response.ok) {
+                newTagNameInput.value = ''; // 清空输入框
+                loadTags(); // 重新加载列表
+            } else {
+                const error = await response.json();
+                alert(`添加失败: ${error.message}`);
+            }
+        });
+
+        // 删除一个标签
+        async function deleteTag(tagName) {
+            if (!confirm(`确定要删除标签 "${tagName}" 吗？\n（注意：这不会移除已使用此标签的媒体上的标签记录）`)) {
+                return;
+            }
+
+            const response = await fetch(`/api/tags/${encodeURIComponent(tagName)}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                loadTags(); // 重新加载列表
+            } else {
+                alert('删除失败！');
+            }
+        }
+
+        // 页面加载时，自动加载所有标签
+        document.addEventListener('DOMContentLoaded', loadTags);
+    </script>
+</body>
+
+</html>
