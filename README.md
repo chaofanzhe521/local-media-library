@@ -1,12 +1,14 @@
+```
 media_library/
 ├── app.py             
 ├── media_data.db      
 ├── static/
-│    ├── css/style.css
+│   ├── css/style.css
 │   └── js/main.js
 └── templates/
     ├── index.html     
-    └── manage.html     
+    └── manage.html
+```    
 
 # 本地媒体库管理器
 
@@ -24,7 +26,7 @@ media_library/
 ## 🚀 如何运行
 
 ### 方式一：直接运行 (推荐)
-1. 前往 [Releases 页面](https://github.com//local-media-library/releases)。
+1. 前往 [Releases 页面](https://github.com/chaofanzhe521/local-media-library/releases/tag/v1.0.0)。
 2. 下载并双击 `app.exe` 即可运行。
 
 ### 方式二：从源代码运行
